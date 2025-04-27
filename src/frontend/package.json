@@ -1,0 +1,21 @@
+{
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "setupFilesAfterEnv": [
+      "<rootDir>/src/setupTests.ts"
+    ],
+    "moduleNameMapper": {
+      "\\.(css|less|scss|sass)$": "identity-obj-proxy"
+    }
+  },
+  "devDependencies": {
+    "@babel/preset-env": "^7.26.9",
+    "@babel/preset-react": "^7.26.3",
+    "@babel/preset-typescript": "^7.27.0",
+    "identity-obj-proxy": "^3.0.0"
+  }
+}
