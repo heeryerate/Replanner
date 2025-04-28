@@ -3,10 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.0",
     "@mui/icons-material": "^5.17.1",
-    "@mui/material": "^5.17.1",
     "@react-google-maps/api": "^2.20.6",
     "@types/axios": "^0.14.4",
     "@types/google.maps": "^3.58.1",
@@ -60,9 +57,12 @@
     "@types/jest": "^29.5.14",
     "@types/react-bootstrap": "^0.32.37",
     "@types/react-router-bootstrap": "^0.26.6",
+    "autoprefixer": "^10.4.21",
     "identity-obj-proxy": "^3.0.0",
     "jest": "^27.5.1",
+    "postcss": "^8.5.3",
     "react-bootstrap": "^2.10.9",
+    "tailwindcss": "^4.1.4",
     "typescript": "^4.9.5"
   },
   "jest": {
