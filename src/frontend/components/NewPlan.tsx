@@ -17,18 +17,11 @@ import {
   List,
   ListItem,
   ListItemText,
-  ListItemIcon,
   Divider,
-  SelectChangeEvent,
   IconButton,
   Tooltip,
   Snackbar,
-  Drawer,
   ListItemButton,
-  ListItemIcon as MuiListItemIcon,
-  ListItemText as MuiListItemText,
-  AppBar,
-  Toolbar,
   Grid,
   FormControl,
   InputLabel,
@@ -40,13 +33,6 @@ import {
   TableBody,
   TableRow,
   TableCell,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Tabs,
-  Tab,
-  useMediaQuery,
   Popover,
   InputAdornment,
 } from '@mui/material';
@@ -62,15 +48,10 @@ import {
   History,
   Home,
   Menu as MenuIcon,
-  Close,
   TravelExplore,
   List as ListIcon,
   ViewList,
   PlayArrow,
-  Delete,
-  Edit,
-  Share,
-  ArrowBack,
   Map as MapIcon,
   Add as AddIcon,
 } from '@mui/icons-material';
@@ -78,7 +59,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import './NewPlan.css';
 import { GOOGLE_MAPS_API_KEY } from '../config';
-import { GoogleMap, useLoadScript, Polyline, Libraries } from '@react-google-maps/api';
+import { GoogleMap, useLoadScript, Polyline, Libraries, Autocomplete } from '@react-google-maps/api';
 
 interface Destination {
   id: string;
@@ -104,11 +85,13 @@ interface MapViewProps {
   plans: TripPlan[];
   isLoaded: boolean;
   loadError: Error | undefined | null;
+  defaultDestinations?: Destination[];
+  selectedDestinations?: Destination[];
 }
 
-const MapView: React.FC<MapViewProps> = ({ plans, isLoaded, loadError }) => {
+const MapView: React.FC<MapViewProps> = ({ plans, isLoaded, loadError, defaultDestinations = [], selectedDestinations = [] }) => {
   const mapRef = useRef<google.maps.Map | null>(null);
-  const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
+  const markersRef = useRef<google.maps.Marker[]>([]);
   const theme = useTheme();
 
   const colors = [
@@ -121,8 +104,35 @@ const MapView: React.FC<MapViewProps> = ({ plans, isLoaded, loadError }) => {
     if (!isLoaded || !mapRef.current) return;
 
     // Clear existing markers
-    markersRef.current.forEach(marker => marker.map = null);
+    markersRef.current.forEach(marker => marker.setMap(null));
     markersRef.current = [];
+
+    // Show selected destinations
+    selectedDestinations.forEach((dest, index) => {
+      if (dest.coordinates) {
+        const marker = new google.maps.Marker({
+          map: mapRef.current,
+          position: { lat: dest.coordinates[0], lng: dest.coordinates[1] },
+          title: dest.name,
+          label: {
+            text: (index + 1).toString(),
+            color: '#FFFFFF',
+            fontWeight: 'bold',
+            fontSize: '14px',
+          },
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 15,
+            fillColor: '#4CAF50',
+            fillOpacity: 1,
+            strokeColor: '#FFFFFF',
+            strokeWeight: 3,
+          },
+        });
+
+        markersRef.current.push(marker);
+      }
+    });
 
     // Create markers and paths for each plan
     plans.forEach((plan, planIndex) => {
@@ -135,24 +145,23 @@ const MapView: React.FC<MapViewProps> = ({ plans, isLoaded, loadError }) => {
 
       // Create markers for each destination
       coordinates.forEach((coord, index) => {
-        const markerDiv = document.createElement('div');
-        markerDiv.style.width = '20px';
-        markerDiv.style.height = '20px';
-        markerDiv.style.backgroundColor = colors[planIndex];
-        markerDiv.style.border = '2px solid #FFFFFF';
-        markerDiv.style.borderRadius = '50%';
-        markerDiv.style.display = 'flex';
-        markerDiv.style.alignItems = 'center';
-        markerDiv.style.justifyContent = 'center';
-        markerDiv.style.color = '#FFFFFF';
-        markerDiv.style.fontWeight = 'bold';
-        markerDiv.style.fontSize = '12px';
-        markerDiv.textContent = (index + 1).toString();
-
-        const marker = new google.maps.marker.AdvancedMarkerElement({
+        const marker = new google.maps.Marker({
           map: mapRef.current,
           position: coord,
-          content: markerDiv,
+          label: {
+            text: (index + 1).toString(),
+            color: '#FFFFFF',
+            fontWeight: 'bold',
+            fontSize: '14px',
+          },
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 15,
+            fillColor: colors[planIndex],
+            fillOpacity: 1,
+            strokeColor: '#FFFFFF',
+            strokeWeight: 3,
+          },
         });
 
         markersRef.current.push(marker);
@@ -172,15 +181,21 @@ const MapView: React.FC<MapViewProps> = ({ plans, isLoaded, loadError }) => {
 
     // Fit bounds to show all markers
     const bounds = new google.maps.LatLngBounds();
-    plans.forEach(plan => {
-      plan.destinations.forEach(dest => {
-        if (dest.coordinates) {
-          bounds.extend({ lat: dest.coordinates[0], lng: dest.coordinates[1] });
-        }
+    const destinationsToShow = [...selectedDestinations, ...plans.flatMap(plan => plan.destinations)];
+
+    destinationsToShow
+      .filter(dest => dest.coordinates)
+      .forEach(dest => {
+        bounds.extend({ lat: dest.coordinates![0], lng: dest.coordinates![1] });
       });
-    });
-    mapRef.current.fitBounds(bounds);
-  }, [isLoaded, plans]);
+    
+    if (!bounds.isEmpty()) {
+      mapRef.current.fitBounds(bounds);
+    } else {
+      mapRef.current.setCenter({ lat: 48.8566, lng: 2.3522 });
+      mapRef.current.setZoom(12);
+    }
+  }, [isLoaded, plans, selectedDestinations]);
 
   if (loadError) {
     return (
@@ -202,8 +217,8 @@ const MapView: React.FC<MapViewProps> = ({ plans, isLoaded, loadError }) => {
     <Box sx={{ height: '600px', width: '100%', position: 'relative' }}>
       <GoogleMap
         mapContainerStyle={{ width: '100%', height: '600px' }}
-        center={{ lat: 0, lng: 0 }}
-        zoom={2}
+        center={{ lat: 48.8566, lng: 2.3522 }} // Default to Paris
+        zoom={12}
         options={{
           zoomControl: true,
           streetViewControl: false,
@@ -215,6 +230,113 @@ const MapView: React.FC<MapViewProps> = ({ plans, isLoaded, loadError }) => {
           mapRef.current = map;
         }}
       />
+    </Box>
+  );
+};
+
+interface AutocompleteInputProps {
+  value: string;
+  onChange: (value: string) => void;
+  onSelect: (place: google.maps.places.PlaceResult) => void;
+  onAddLocation: (place: google.maps.places.PlaceResult) => void;
+  placeholder?: string;
+  isLoaded: boolean;
+}
+
+const AutocompleteInput: React.FC<AutocompleteInputProps> = ({ 
+  value, 
+  onChange, 
+  onSelect, 
+  onAddLocation,
+  placeholder, 
+  isLoaded 
+}) => {
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [selectedPlace, setSelectedPlace] = useState<google.maps.places.PlaceResult | null>(null);
+  const theme = useTheme();
+
+  const onLoad = (autocomplete: google.maps.places.Autocomplete) => {
+    autocompleteRef.current = autocomplete;
+    autocomplete.setFields(['formatted_address', 'geometry', 'name', 'place_id']);
+  };
+
+  const onPlaceChanged = () => {
+    if (autocompleteRef.current) {
+      const place = autocompleteRef.current.getPlace();
+      if (place.formatted_address) {
+        setSelectedPlace(place);
+        onSelect(place);
+      }
+    }
+  };
+
+  const handleAddClick = () => {
+    if (selectedPlace) {
+      onAddLocation(selectedPlace);
+      setSelectedPlace(null);
+      onChange('');
+    }
+  };
+
+  if (!isLoaded) {
+    return (
+      <TextField
+        fullWidth
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        InputProps={{
+          startAdornment: <LocationOn sx={{ color: 'text.secondary', mr: 1 }} />,
+        }}
+        disabled
+      />
+    );
+  }
+
+  return (
+    <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', width: '100%' }}>
+      <Box sx={{ flex: 1 }}>
+        <Autocomplete
+          onLoad={onLoad}
+          onPlaceChanged={onPlaceChanged}
+        >
+          <TextField
+            fullWidth
+            inputRef={inputRef}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={placeholder}
+            InputProps={{
+              startAdornment: <LocationOn sx={{ color: 'text.secondary', mr: 1 }} />,
+            }}
+            sx={{ 
+              '& .MuiOutlinedInput-root': {
+                height: '56px',
+              }
+            }}
+          />
+        </Autocomplete>
+      </Box>
+      <Button
+        variant="contained"
+        color="primary"
+        onClick={handleAddClick}
+        disabled={!selectedPlace}
+        startIcon={<AddIcon />}
+        sx={{ 
+          height: '56px',
+          minWidth: '120px',
+          whiteSpace: 'nowrap',
+          '&:hover': {
+            transform: 'translateY(-2px)',
+            boxShadow: 3,
+          },
+          transition: 'all 0.2s',
+        }}
+      >
+        Add
+      </Button>
     </Box>
   );
 };
@@ -239,6 +361,8 @@ const PlanGenerator: React.FC = () => {
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [isAddingDestination, setIsAddingDestination] = useState(false);
   const [hoveredChip, setHoveredChip] = useState<Destination | null>(null);
+  const [placeDetails, setPlaceDetails] = useState<google.maps.places.PlaceResult | null>(null);
+  const [selectedPlaces, setSelectedPlaces] = useState<google.maps.places.PlaceResult[]>([]);
   const { isLoaded, loadError } = useLoadScript({
     googleMapsApiKey: GOOGLE_MAPS_API_KEY || '',
     libraries: LIBRARIES,
@@ -265,7 +389,8 @@ const PlanGenerator: React.FC = () => {
         openHours: '9:00 AM - 12:45 AM',
         category: 'Landmark',
         preferences: ['Historical', 'Architecture'],
-        summary: 'Iconic iron tower offering panoramic views of Paris'
+        summary: 'Iconic iron tower offering panoramic views of Paris',
+        coordinates: [48.8584, 2.2945] // Eiffel Tower coordinates
       },
       {
         id: '2',
@@ -274,7 +399,8 @@ const PlanGenerator: React.FC = () => {
         openHours: '9:00 AM - 6:00 PM',
         category: 'Museum',
         preferences: ['Art', 'History'],
-        summary: 'World\'s largest art museum and historic monument'
+        summary: 'World\'s largest art museum and historic monument',
+        coordinates: [48.8606, 2.3376] // Louvre Museum coordinates
       },
       {
         id: '3',
@@ -283,7 +409,8 @@ const PlanGenerator: React.FC = () => {
         openHours: '8:00 AM - 6:45 PM',
         category: 'Landmark',
         preferences: ['Historical', 'Architecture'],
-        summary: 'Medieval Catholic cathedral with Gothic architecture'
+        summary: 'Medieval Catholic cathedral with Gothic architecture',
+        coordinates: [48.8530, 2.3499] // Notre-Dame coordinates
       },
       {
         id: '4',
@@ -292,7 +419,8 @@ const PlanGenerator: React.FC = () => {
         openHours: '10:00 AM - 11:00 PM',
         category: 'Landmark',
         preferences: ['Historical', 'Architecture'],
-        summary: 'Iconic triumphal arch honoring those who fought for France'
+        summary: 'Iconic triumphal arch honoring those who fought for France',
+        coordinates: [48.8738, 2.2950] // Arc de Triomphe coordinates
       }
     ];
 
@@ -351,22 +479,29 @@ const PlanGenerator: React.FC = () => {
     setAnchorEl(null);
   };
 
-  const handleAddDestination = () => {
-    if (newDestination.trim()) {
+  const handlePlaceSelect = (place: google.maps.places.PlaceResult) => {
+    setPlaceDetails(place);
+    if (place.formatted_address) {
+      setNewDestination(place.formatted_address);
+    }
+  };
+
+  const handleAddLocation = (place: google.maps.places.PlaceResult) => {
+    if (place.geometry?.location) {
       const newDest: Destination = {
-        id: Date.now().toString(),
-        name: newDestination,
-        location: newDestination,
-        openHours: '9:00 AM - 5:00 PM',
+        id: `user-${Date.now()}`,
+        name: place.name || place.formatted_address || 'Unknown Location',
+        location: place.formatted_address || 'Unknown Location',
+        openHours: '24/7',
         category: 'Custom',
         preferences: [],
-        summary: 'Custom destination added by user',
+        summary: place.formatted_address || 'Custom destination added by user',
+        coordinates: [place.geometry.location.lat(), place.geometry.location.lng()]
       };
+      
       setDestinationOptions(prev => [...prev, newDest]);
       setSelectedDestinationIds(prev => [...prev, newDest.id]);
-      setNewDestination('');
-      setIsAddingDestination(false);
-      setAnchorEl(null);
+      setSelectedPlaces(prev => [...prev, place]);
     }
   };
 
@@ -700,12 +835,11 @@ const PlanGenerator: React.FC = () => {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setNewDestination(value);
+    // Only show/hide the popover based on if there's any input
     if (value.trim()) {
-      setAnchorEl(e.currentTarget);
       setIsAddingDestination(true);
     } else {
       setIsAddingDestination(false);
-      setAnchorEl(null);
     }
   };
 
@@ -836,39 +970,13 @@ const PlanGenerator: React.FC = () => {
                 <FormHelperText>Select your preferred mode of transportation</FormHelperText>
               </FormControl>
 
-              <TextField
-                fullWidth
-                label="Add New Destination"
+              <AutocompleteInput
                 value={newDestination}
-                onChange={handleInputChange}
-                onFocus={(e) => {
-                  if (newDestination.trim()) {
-                    setAnchorEl(e.currentTarget);
-                    setIsAddingDestination(true);
-                  }
-                }}
-                onBlur={(e) => {
-                  // Only close if clicking outside the popover
-                  if (!e.relatedTarget?.closest('.MuiPopover-root')) {
-                    setIsAddingDestination(false);
-                    setAnchorEl(null);
-                  }
-                }}
-                InputProps={{
-                  startAdornment: <LocationOn sx={{ color: 'text.secondary', mr: 1 }} />,
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton
-                        onClick={handleAddDestination}
-                        disabled={!newDestination.trim()}
-                        edge="end"
-                      >
-                        <AddIcon />
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                }}
-                sx={{ mb: 3 }}
+                onChange={setNewDestination}
+                onSelect={handlePlaceSelect}
+                onAddLocation={handleAddLocation}
+                placeholder="Add New Destination"
+                isLoaded={isLoaded}
               />
 
               <FormControl fullWidth sx={{ mb: 3 }}>
@@ -1016,28 +1124,57 @@ const PlanGenerator: React.FC = () => {
                         plans={plans}
                         isLoaded={isLoaded}
                         loadError={loadError}
+                        selectedDestinations={selectedDestinationIds.map(id => 
+                          destinationOptions.find(dest => dest.id === id)
+                        ).filter((dest): dest is Destination => dest !== undefined)}
                       />
                     )}
                   </Box>
                 )}
               </Box>
             ) : (
-              <Box
-                sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  minHeight: '300px',
-                }}
-              >
-                <TravelExplore sx={{ fontSize: 60, color: 'text.secondary', mb: 2 }} />
-                <Typography variant="h6" color="text.secondary" gutterBottom>
-                  No plans generated yet
-                </Typography>
-                <Typography variant="body2" color="text.secondary" align="center">
-                  Fill in the form and click "Generate Travel Plan" to create your itinerary
-                </Typography>
+              <Box sx={{ height: 'calc(100vh - 300px)' }}>
+                {activeView === 'map' && (
+                  <Box sx={{ height: '100%' }}>
+                    {!isLoaded ? (
+                      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+                        <CircularProgress />
+                      </Box>
+                    ) : loadError ? (
+                      <Alert severity="error">
+                        Error loading Google Maps: {loadError.message}
+                      </Alert>
+                    ) : (
+                      <MapView
+                        plans={[]}
+                        isLoaded={isLoaded}
+                        loadError={loadError}
+                        selectedDestinations={selectedDestinationIds.map(id => 
+                          destinationOptions.find(dest => dest.id === id)
+                        ).filter((dest): dest is Destination => dest !== undefined)}
+                      />
+                    )}
+                  </Box>
+                )}
+                {activeView !== 'map' && (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      minHeight: '300px',
+                    }}
+                  >
+                    <TravelExplore sx={{ fontSize: 60, color: 'text.secondary', mb: 2 }} />
+                    <Typography variant="h6" color="text.secondary" gutterBottom>
+                      No plans generated yet
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" align="center">
+                      Fill in the form and click "Generate Travel Plan" to create your itinerary
+                    </Typography>
+                  </Box>
+                )}
               </Box>
             )}
           </Paper>
